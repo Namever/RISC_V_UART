@@ -1,0 +1,42 @@
+module UART_Bootloader (
+    input  logic        clk,
+    input  logic        rst,
+    
+    // 與 UART RX 模組的介面
+    input  logic        rx_ready,  // UART 收完 1 byte 時會產生一個 pulse
+    input  logic [7:0]  rx_data,   // UART 收到的 8-bit 資料
+    
+    // 與 Instruction RAM 的介面
+    output logic        ram_we,
+    output logic [31:0] ram_addr,
+    output logic [31:0] ram_wdata
+);
+
+    logic [1:0] byte_cnt;
+    logic [31:0] buffer;
+
+    always_ff @(posedge clk or posedge rst) begin
+        if (rst) begin
+            byte_cnt <= 2'd0;
+            ram_addr <= 32'd0;
+            ram_we   <= 1'b0;
+            buffer   <= 32'd0;
+            ram_wdata<= 32'd0;
+        end else begin
+            ram_we <= 1'b0; // 預設不寫入
+            
+            if (rx_ready) begin
+                // Little-Endian 拼裝法：新來的 byte 放高位，舊的往右推
+                buffer <= {rx_data, buffer[31:8]}; 
+                byte_cnt <= byte_cnt + 1'b1;
+                
+                // 收滿 4 個 bytes 了
+                if (byte_cnt == 2'd3) begin
+                    ram_wdata <= {rx_data, buffer[31:8]};
+                    ram_we    <= 1'b1;        // 觸發寫入
+                    ram_addr  <= ram_addr + 4; // 位址前進下一個 Word
+                end
+            end
+        end
+    end
+endmodule
